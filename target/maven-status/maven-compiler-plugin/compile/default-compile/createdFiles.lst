@@ -1,0 +1,6 @@
+sv\edu\blockchain\BlockChain.class
+sv\edu\blockchain\crypto\CryptoService.class
+sv\edu\blockchain\Main.class
+sv\edu\blockchain\model\AcademicTitleTransaction.class
+sv\edu\blockchain\model\Block.class
+sv\edu\blockchain\service\HashService.class
