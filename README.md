@@ -89,6 +89,47 @@ También se puede ejecutar directamente con Java:
 java -cp target/classes sv.edu.blockchain.Main
 ```
 
+## Servidores de red y Wallet TLS
+
+El servidor de red acepta conexiones TCP protegidas con TLS, intercambia solicitudes/respuestas JSON y ofrece `get-chain`, `get-block` y `submit-block`. Los bloques recibidos se validan con la prueba de trabajo y las reglas existentes antes de agregarse. Los nodos consultan a sus peers cada cinco segundos y adoptan la cadena válida más larga; cadenas de igual longitud se resuelven determinísticamente usando el hash final.
+
+Cada bloque se guarda como `<hash>.json`. El JSON contiene un payload cifrado con AES-GCM y su hash visible para verificar el nombre. La clave de almacenamiento se proporciona mediante `BLOCKCHAIN_STORAGE_KEY`; no se guarda en el repositorio. Perder o cambiar esta clave impide leer los bloques ya almacenados.
+
+### Crear certificados de desarrollo
+
+Se necesita un certificado de servidor y un truststore que confíe en él. Para pruebas locales se puede generar un certificado autofirmado; en producción se debe usar una CA confiable y proteger los secretos por separado.
+
+```powershell
+keytool -genkeypair -alias blockchain -keyalg RSA -keysize 3072 -validity 365 -storetype PKCS12 -keystore server.p12 -storepass changeit -keypass changeit -dname "CN=localhost" -ext "SAN=dns:localhost,ip:127.0.0.1"
+keytool -exportcert -alias blockchain -keystore server.p12 -storepass changeit -rfc -file server.crt
+keytool -importcert -noprompt -alias blockchain -file server.crt -keystore truststore.p12 -storetype PKCS12 -storepass changeit
+```
+
+Los comandos usan contraseñas de ejemplo para desarrollo; no deben reutilizarse en despliegues. Configure la variable de entorno antes de iniciar los procesos:
+
+```powershell
+$env:BLOCKCHAIN_STORAGE_KEY = "use-a-long-random-secret-for-local-development"
+```
+
+Inicie dos terminales en el directorio del proyecto. Ambos servidores deben confiar en el certificado presentado por sus peers:
+
+```powershell
+mvn exec:java "-Dexec.mainClass=sv.edu.blockchain.server.BlockchainServer" "-Dexec.args=8443 data\node1 localhost:8444" "-Djavax.net.ssl.keyStore=server.p12" "-Djavax.net.ssl.keyStorePassword=changeit" "-Djavax.net.ssl.trustStore=truststore.p12" "-Djavax.net.ssl.trustStorePassword=changeit"
+mvn exec:java "-Dexec.mainClass=sv.edu.blockchain.server.BlockchainServer" "-Dexec.args=8444 data\node2 localhost:8443" "-Djavax.net.ssl.keyStore=server.p12" "-Djavax.net.ssl.keyStorePassword=changeit" "-Djavax.net.ssl.trustStore=truststore.p12" "-Djavax.net.ssl.trustStorePassword=changeit"
+```
+
+Ejecute la Wallet en una tercera terminal, con la misma confianza TLS:
+
+```powershell
+mvn exec:java "-Dexec.mainClass=sv.edu.blockchain.wallet.WalletMain" "-Dexec.args=localhost 8443" "-Djavax.net.ssl.trustStore=truststore.p12" "-Djavax.net.ssl.trustStorePassword=changeit"
+```
+
+La Wallet de demostración permite consultar la cadena y los detalles públicos de cada título; no requiere login. Los datos de identidad continúan cifrados y no se transmiten en texto plano. El listener actual cifra el canal con TLS y valida certificados del servidor, pero no habilita certificados de cliente ni autenticación de usuarios.
+
+Al iniciar un nodo nuevo, la cadena contiene solamente el bloque Génesis, por lo que la Wallet mostrará cero títulos. La Wallet actual es de consulta; `submit-block` requiere enviar un bloque ya minado y la aplicación de consola `Main` trabaja con una cadena independiente en memoria, no con el servidor de red. Por lo tanto, registrar un título desde `Main` no lo publicará en estos nodos.
+
+El consenso implementado es educativo: prueba de trabajo y selección de la cadena válida más larga, con desempate determinista. No es un protocolo BFT ni garantiza seguridad frente a nodos maliciosos o una mayoría de potencia de minado.
+
 ## Ejemplo de ejecución en consola
 
 ```text

@@ -62,6 +62,10 @@ public class Block {
         this.hash = hash;
     }
 
+    public void setNonce(long nonce) {
+        this.nonce = nonce;
+    }
+
     public void addTransaction(AcademicTitleTransaction transaction) {
         if (sealed) {
             throw new IllegalStateException("No se puede modificar un bloque ya minado.");
@@ -77,6 +81,14 @@ public class Block {
 
     public void seal() {
         this.sealed = true;
+    }
+
+    public static Block restore(int id, long timestamp, String previousHash, String hash,
+                                long nonce, List<AcademicTitleTransaction> transactions) {
+        Block block = new Block(id, timestamp, previousHash, hash, transactions);
+        block.nonce = nonce;
+        block.sealed = true;
+        return block;
     }
 
     public void mine(int difficulty, String prefix) {

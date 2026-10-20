@@ -32,7 +32,7 @@ public class BlockChain {
         return prefix;
     }
 
-    public void createGenesis() {
+    public synchronized void createGenesis() {
         if (!blocks.isEmpty()) {
             throw new IllegalStateException("El bloque Génesis ya existe.");
         }
@@ -41,22 +41,22 @@ public class BlockChain {
         blocks.add(genesis);
     }
 
-    public Block getGenesis() {
+    public synchronized Block getGenesis() {
         if (blocks.isEmpty()) {
             return null;
         }
         return blocks.get(0);
     }
 
-    public List<Block> getBlocks() {
+    public synchronized List<Block> getBlocks() {
         return List.copyOf(blocks);
     }
 
-    public Block getProposedBlock() {
+    public synchronized Block getProposedBlock() {
         return proposedBlock;
     }
 
-    public Block createProposedBlock() {
+    public synchronized Block createProposedBlock() {
         if (blocks.isEmpty()) {
             throw new IllegalStateException("Debe crear y minar el bloque Génesis antes de crear un bloque propuesto.");
         }
@@ -69,7 +69,7 @@ public class BlockChain {
         return nextBlock;
     }
 
-    public void addTransactionToLastBlock(String transactionId,
+    public synchronized void addTransactionToLastBlock(String transactionId,
                                          String fullName,
                                          String dui,
                                          String academicProgram,
@@ -95,7 +95,7 @@ public class BlockChain {
         proposedBlock.addTransaction(transaction);
     }
 
-    public void mineLastBlock() {
+    public synchronized void mineLastBlock() {
         if (proposedBlock == null) {
             throw new IllegalStateException("No hay un bloque propuesto para minar.");
         }
@@ -107,16 +107,19 @@ public class BlockChain {
         proposedBlock = null;
     }
 
-    public void addMinedBlock(Block block) {
+    public synchronized void addMinedBlock(Block block) {
         if (block == null) {
             throw new IllegalArgumentException("El bloque no puede ser nulo.");
         }
         if (blocks.isEmpty() && block.getId() != 0) {
             throw new IllegalArgumentException("El primer bloque debe ser el Génesis.");
         }
+        if (blocks.isEmpty() && !"0".repeat(64).equals(block.getPreviousHash())) {
+            throw new IllegalArgumentException("El previousHash del Génesis no es válido.");
+        }
         if (blocks.size() > 0) {
             Block lastBlock = getLastBlock();
-            if (!block.getPreviousHash().equals(lastBlock.getHash())) {
+            if (block.getPreviousHash() == null || !block.getPreviousHash().equals(lastBlock.getHash())) {
                 throw new IllegalArgumentException("El previousHash del bloque no coincide con el último bloque de la cadena.");
             }
             if (block.getId() != lastBlock.getId() + 1) {
@@ -140,9 +143,18 @@ public class BlockChain {
                 throw new IllegalArgumentException("El bloque Génesis no debe contener transacciones.");
             }
         } else {
+            Set<String> seenTransactionIds = new HashSet<>();
+            for (Block existing : blocks) {
+                for (AcademicTitleTransaction transaction : existing.getTransactions()) {
+                    seenTransactionIds.add(transaction.getTransactionId());
+                }
+            }
             for (AcademicTitleTransaction tx : block.getTransactions()) {
                 if (tx == null || !tx.validate()) {
                     throw new IllegalArgumentException("El bloque contiene transacciones inválidas.");
+                }
+                if (!seenTransactionIds.add(tx.getTransactionId())) {
+                    throw new IllegalArgumentException("El bloque contiene un ID de transacción duplicado.");
                 }
             }
         }
@@ -154,7 +166,35 @@ public class BlockChain {
         blocks.add(block);
     }
 
-    public boolean validateChain() {
+    public synchronized boolean considerChain(List<Block> candidateBlocks) {
+        if (candidateBlocks == null || candidateBlocks.isEmpty()) {
+            return false;
+        }
+        BlockChain candidate = new BlockChain(difficulty, prefix);
+        try {
+            for (Block block : candidateBlocks) {
+                candidate.addMinedBlock(block);
+            }
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+        if (!candidate.validateChain()) {
+            return false;
+        }
+        boolean longer = candidate.blocks.size() > blocks.size();
+        boolean deterministicTieBreak = candidate.blocks.size() == blocks.size()
+                && !blocks.isEmpty()
+                && candidate.getLastBlock().getHash().compareTo(getLastBlock().getHash()) < 0;
+        if (!longer && !deterministicTieBreak) {
+            return false;
+        }
+        blocks.clear();
+        blocks.addAll(candidate.blocks);
+        proposedBlock = null;
+        return true;
+    }
+
+    public synchronized boolean validateChain() {
         if (blocks.isEmpty()) {
             return false;
         }
@@ -210,14 +250,14 @@ public class BlockChain {
         return true;
     }
 
-    public Block getBlock(int index) {
+    public synchronized Block getBlock(int index) {
         if (index < 0 || index >= blocks.size()) {
             return null;
         }
         return blocks.get(index);
     }
 
-    public Block getLastBlock() {
+    public synchronized Block getLastBlock() {
         if (blocks.isEmpty()) {
             return null;
         }

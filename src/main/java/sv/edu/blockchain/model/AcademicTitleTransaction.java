@@ -38,6 +38,31 @@ public class AcademicTitleTransaction {
         this.issuerSignature = requireText(issuerSignature, "Firma o identificador de la institución");
     }
 
+    public static AcademicTitleTransaction fromEncrypted(String transactionId,
+                                                          String encryptedFullName,
+                                                          String encryptedDui,
+                                                          String academicProgram,
+                                                          String degree,
+                                                          String institutionName,
+                                                          LocalDate graduationDate,
+                                                          LocalDate emissionDate,
+                                                          String issuerSignature) {
+        AcademicTitleTransaction transaction = new AcademicTitleTransaction();
+        transaction.transactionId = requireText(transactionId, "ID de transacción");
+        transaction.encryptedFullName = requireText(encryptedFullName, "Nombre cifrado");
+        transaction.encryptedDui = requireText(encryptedDui, "DUI cifrado");
+        transaction.academicProgram = requireText(academicProgram, "Carrera o programa académico");
+        transaction.degree = requireText(degree, "Grado obtenido");
+        transaction.institutionName = requireText(institutionName, "Universidad o institución emisora");
+        transaction.graduationDate = Objects.requireNonNull(graduationDate, "Fecha de graduación");
+        transaction.emissionDate = Objects.requireNonNull(emissionDate, "Fecha de emisión");
+        transaction.issuerSignature = requireText(issuerSignature, "Firma o identificador de la institución");
+        return transaction;
+    }
+
+    private AcademicTitleTransaction() {
+    }
+
     public String getTransactionId() {
         return transactionId;
     }
